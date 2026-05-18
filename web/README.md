@@ -47,7 +47,63 @@ npm --prefix web run build
 NEXT_PUBLIC_SITE_URL=https://your-domain.example
 ```
 
+建议先在本地复制一份环境变量样例：
+
+```powershell
+Copy-Item web/.env.example web/.env.local
+```
+
+然后把 `NEXT_PUBLIC_SITE_URL` 改成你准备绑定到 Vercel 的正式域名。这个值必须是站点根地址，例如 `https://your-domain.example`，不要带路径、查询参数或尾部说明。
+
 生产环境的 `/api/rewrite` 会校验请求 `Origin`。如果未配置 `NEXT_PUBLIC_SITE_URL` 且没有可用的 `VERCEL_URL`，接口会 fail closed 并拒绝请求。
+
+如果你先用 `*.vercel.app` 域名上线，也建议显式设置 `NEXT_PUBLIC_SITE_URL`，不要只依赖 `VERCEL_URL` 自动推断。这样更容易排查跨域和来源校验问题。
+
+## 上线前检查
+
+在推送到 Vercel 前，至少完成下面几项：
+
+```powershell
+npm --prefix web run test:run
+npm --prefix web run lint
+npm --prefix web run build
+```
+
+还要人工确认：
+
+1. 首页、`/rewrite`、`/settings`、`/history`、`/privacy` 都能正常打开。
+2. 未填写原文时，改写页会阻止提交。
+3. 设置页里未确认风险前，不会保存 API Key。
+4. 隐私页明确写了服务器不保存 API Key、原文和改写结果。
+5. 公开文案中没有“保证通过 AI 检测”“绕过检测”“规避审查”之类承诺。
+
+## Vercel 配置建议
+
+建议在 Vercel 项目里按下面方式配置：
+
+1. Framework Preset 使用 `Next.js`。
+2. Root Directory 设为 `web`。
+3. Production 环境显式配置 `NEXT_PUBLIC_SITE_URL`。
+4. 先不要开放任何自定义 Base URL 相关开关，V1 继续只用平台预设。
+
+## 上线后验证
+
+部署完成后，至少验证一次真实线上链路：
+
+1. 访问首页，确认没有空白页或 CSP 报错。
+2. 打开 `/rewrite`，确认页面能正常渲染。
+3. 不填原文直接提交，确认前端校验仍生效。
+4. 填入测试用 API Key 和短文本，确认 `/api/rewrite` 不会因为来源校验误拦截。
+5. 刷新设置页，确认未勾选保存时 API Key 不会残留。
+
+## 回滚点
+
+如果线上部署后出现问题，优先按这个顺序排查：
+
+1. 检查 `NEXT_PUBLIC_SITE_URL` 是否与实际访问域名完全对应。
+2. 检查浏览器控制台是否有 `Content-Security-Policy` 违规。
+3. 检查 Vercel Functions 日志里是否只有脱敏后的错误，没有 API Key 或原文。
+4. 如确认为本次改动引入问题，先回滚到上一版成功部署，再单独修复安全头或来源校验配置。
 
 ## 安全与隐私说明
 

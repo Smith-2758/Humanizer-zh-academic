@@ -7,6 +7,7 @@ import {
   getClientIp,
   sanitizeErrorDetail,
   validateOrigin,
+  validateRequestOrigin,
 } from "./requestGuards";
 
 describe("request guards", () => {
@@ -21,8 +22,38 @@ describe("request guards", () => {
     expect(validateOrigin("https://humanizer.vercel.app", allowedOrigins)).toBe(true);
   });
 
+  it("normalizes configured origins from full URLs", () => {
+    const allowedOrigins = getAllowedOrigins({
+      NODE_ENV: "production",
+      NEXT_PUBLIC_SITE_URL: "https://example.com/app/",
+    });
+
+    expect(allowedOrigins).toEqual(["https://example.com"]);
+    expect(validateOrigin("https://example.com", allowedOrigins)).toBe(true);
+  });
+
   it("rejects unknown origins", () => {
     expect(validateOrigin("https://evil.example", ["https://example.com"])).toBe(false);
+  });
+
+  it("accepts allowed referer when origin is missing", () => {
+    expect(
+      validateRequestOrigin(null, "https://example.com/rewrite?from=nav", ["https://example.com"]),
+    ).toBe(true);
+  });
+
+  it("rejects mismatched origin even if referer looks allowed", () => {
+    expect(
+      validateRequestOrigin(
+        "https://evil.example",
+        "https://example.com/rewrite?from=nav",
+        ["https://example.com"],
+      ),
+    ).toBe(false);
+  });
+
+  it("rejects invalid referer fallback", () => {
+    expect(validateRequestOrigin(null, "not-a-url", ["https://example.com"])).toBe(false);
   });
 
   it("fails closed in production when no origin is configured", () => {

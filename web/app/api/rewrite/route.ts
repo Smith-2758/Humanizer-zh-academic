@@ -1,6 +1,6 @@
 import { RewriteError } from "@/lib/ai/errors";
 import type { RewriteRequest } from "@/lib/ai/types";
-import { assertContentLengthAllowed, assertRawBodyAllowed, getAllowedOrigins, getClientIp, sanitizeErrorDetail, validateOrigin } from "@/lib/server/requestGuards";
+import { assertContentLengthAllowed, assertRawBodyAllowed, getAllowedOrigins, getClientIp, sanitizeErrorDetail, validateRequestOrigin } from "@/lib/server/requestGuards";
 import { rewriteRateLimiter } from "@/lib/server/rateLimit";
 import { handleRewriteRequest } from "@/lib/server/rewriteHandler";
 
@@ -32,7 +32,13 @@ export async function POST(request: Request) {
 
   try {
     const allowedOrigins = getAllowedOrigins();
-    if (!validateOrigin(request.headers.get("origin"), allowedOrigins)) {
+    if (
+      !validateRequestOrigin(
+        request.headers.get("origin"),
+        request.headers.get("referer"),
+        allowedOrigins,
+      )
+    ) {
       throw new RewriteError("provider_error", "请求来源不被允许。", 403);
     }
 

@@ -52,6 +52,36 @@ describe("POST /api/rewrite", () => {
     expect(body).toMatchObject({ ok: false, errorCode: "provider_error" });
   });
 
+  it("accepts allowed Referer when Origin is missing", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://example.com/app/");
+    const { POST } = await import("./route");
+
+    const response = await POST(
+      makeRequest(validPayload(), {
+        origin: "",
+        referer: "https://example.com/rewrite",
+      }),
+    );
+
+    expect(response.status).toBe(200);
+  });
+
+  it("rejects mismatched Origin even if Referer looks allowed", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://example.com/app/");
+    const { POST } = await import("./route");
+
+    const response = await POST(
+      makeRequest(validPayload(), {
+        origin: "https://evil.example",
+        referer: "https://example.com/rewrite",
+      }),
+    );
+
+    expect(response.status).toBe(403);
+  });
+
   it("fails closed in production when no allowed origin is configured", async () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("NEXT_PUBLIC_SITE_URL", "");

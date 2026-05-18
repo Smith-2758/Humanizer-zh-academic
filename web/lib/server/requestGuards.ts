@@ -2,21 +2,44 @@ import { RewriteError } from "@/lib/ai/errors";
 
 const MAX_BODY_BYTES = 64_000;
 
+function normalizeOrigin(value?: string) {
+  if (!value) return undefined;
+
+  try {
+    return new URL(value).origin;
+  } catch {
+    return undefined;
+  }
+}
+
 export function getAllowedOrigins(env = process.env) {
   const origins = [
-    env.NEXT_PUBLIC_SITE_URL,
-    env.VERCEL_URL ? `https://${env.VERCEL_URL}` : undefined,
+    normalizeOrigin(env.NEXT_PUBLIC_SITE_URL),
+    normalizeOrigin(env.VERCEL_URL ? `https://${env.VERCEL_URL}` : undefined),
   ].filter(Boolean) as string[];
 
   if (env.NODE_ENV !== "production") origins.push("http://localhost:3000");
 
-  return origins;
+  return [...new Set(origins)];
 }
 
 export function validateOrigin(origin: string | null, allowedOrigins: string[]) {
   if (!origin) return false;
   if (allowedOrigins.length === 0) return false;
   return allowedOrigins.includes(origin);
+}
+
+export function validateRequestOrigin(
+  origin: string | null,
+  referer: string | null,
+  allowedOrigins: string[],
+) {
+  if (origin) return validateOrigin(origin, allowedOrigins);
+
+  const refererOrigin = normalizeOrigin(referer ?? undefined);
+  if (!refererOrigin) return false;
+
+  return validateOrigin(refererOrigin, allowedOrigins);
 }
 
 export function assertContentLengthAllowed(request: Request) {
