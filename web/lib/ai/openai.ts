@@ -61,6 +61,7 @@ async function parseJson(response: Response) {
 export async function callOpenAICompatible(args: CallProviderArgs): Promise<ModelResult> {
   const response = await fetch(args.endpoint, {
     method: "POST",
+    redirect: "error",
     headers: {
       "content-type": "application/json",
       Authorization: `Bearer ${args.apiKey}`,

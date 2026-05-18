@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ModelSettingsPanel } from "./ModelSettingsPanel";
 
 describe("ModelSettingsPanel", () => {
@@ -11,7 +11,7 @@ describe("ModelSettingsPanel", () => {
     expect(screen.getByLabelText("模型名")).toHaveValue("deepseek-chat");
   });
 
-  it("does not expose editable Base URL for OpenAI official or Anthropic", () => {
+  it("keeps Base URL hidden while official presets are selected", () => {
     render(<ModelSettingsPanel />);
 
     expect(screen.queryByRole("textbox", { name: "Base URL" })).not.toBeInTheDocument();
@@ -21,10 +21,36 @@ describe("ModelSettingsPanel", () => {
     expect(screen.queryByRole("textbox", { name: "Base URL" })).not.toBeInTheDocument();
   });
 
-  it("marks custom Base URL as unavailable in V1", () => {
-    render(<ModelSettingsPanel />);
+  it("shows custom Base URL input when custom interface is selected", () => {
+    const onInterfaceModeChange = vi.fn();
+    const onBaseUrlChange = vi.fn();
+    const { rerender } = render(
+      <ModelSettingsPanel
+        interfaceMode="official"
+        baseUrl=""
+        onInterfaceModeChange={onInterfaceModeChange}
+        onBaseUrlChange={onBaseUrlChange}
+      />,
+    );
 
-    expect(screen.getByText(/自定义 Base URL/)).toHaveTextContent("V1 暂不开放");
+    fireEvent.click(screen.getByRole("button", { name: "自定义接口" }));
+
+    expect(onInterfaceModeChange).toHaveBeenCalledWith("custom");
+
+    rerender(
+      <ModelSettingsPanel
+        interfaceMode="custom"
+        baseUrl="https://gateway.example.com/v1"
+        onInterfaceModeChange={onInterfaceModeChange}
+        onBaseUrlChange={onBaseUrlChange}
+      />,
+    );
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Base URL" }), {
+      target: { value: "https://api.example.com/v1" },
+    });
+
+    expect(onBaseUrlChange).toHaveBeenCalledWith("https://api.example.com/v1");
   });
 
   it("syncs displayed preset and model when defaults are loaded by the parent", () => {

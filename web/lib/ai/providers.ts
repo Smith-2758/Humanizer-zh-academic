@@ -1,3 +1,4 @@
+import { RewriteError } from "./errors";
 import type { Provider, ProviderPresetId } from "./types";
 
 type ResolveArgs = {
@@ -22,6 +23,7 @@ export type ProviderPreset = {
 
 const OPENAI_ENDPOINT = "https://api.openai.com/v1/chat/completions";
 const ANTHROPIC_ENDPOINT = "https://api.anthropic.com/v1/messages";
+const LOCAL_HOSTNAMES = new Set(["localhost", "local"]);
 
 const PRESETS: ProviderPreset[] = [
   {
@@ -92,6 +94,81 @@ export function getProviderPresets() {
   return PRESETS;
 }
 
+function parseIpv4(hostname: string) {
+  const parts = hostname.split(".");
+  if (parts.length !== 4) return undefined;
+
+  const octets = parts.map((part) => {
+    if (!/^\d{1,3}$/.test(part)) return undefined;
+    const value = Number(part);
+    return value >= 0 && value <= 255 ? value : undefined;
+  });
+
+  return octets.every((value) => value !== undefined) ? (octets as number[]) : undefined;
+}
+
+function isPrivateOrLocalHostname(hostname: string) {
+  const normalized = hostname.replace(/^\[/, "").replace(/\]$/, "").replace(/\.$/, "").toLowerCase();
+  if (!normalized) return true;
+  if (LOCAL_HOSTNAMES.has(normalized) || normalized.endsWith(".localhost") || normalized.endsWith(".local")) {
+    return true;
+  }
+  if (!normalized.includes(".") && !normalized.includes(":")) return true;
+  if (/^\d+$/.test(normalized)) return true;
+  if (normalized.includes(":")) return true;
+
+  const ipv4 = parseIpv4(normalized);
+  if (!ipv4) return false;
+
+  const [a, b] = ipv4;
+  return (
+    a === 0 ||
+    a === 10 ||
+    a === 127 ||
+    (a === 100 && b >= 64 && b <= 127) ||
+    (a === 169 && b === 254) ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) ||
+    (a === 198 && (b === 18 || b === 19)) ||
+    a >= 224
+  );
+}
+
+function resolveCustomOpenAIEndpoint(baseUrl: string) {
+  const trimmed = baseUrl.trim();
+  if (!trimmed) {
+    throw new RewriteError("invalid_base_url", "请填写自定义 Base URL。", 400);
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    throw new RewriteError("invalid_base_url", "Base URL 格式不正确。", 400);
+  }
+
+  if (parsed.protocol !== "https:") {
+    throw new RewriteError("invalid_base_url", "Base URL 必须使用 HTTPS。", 400);
+  }
+  if (parsed.username || parsed.password) {
+    throw new RewriteError("invalid_base_url", "Base URL 不能包含用户名或密码。", 400);
+  }
+  if (parsed.search || parsed.hash) {
+    throw new RewriteError("invalid_base_url", "Base URL 不能包含 query 或 fragment。", 400);
+  }
+  if (parsed.port && parsed.port !== "443") {
+    throw new RewriteError("unsafe_base_url", "Base URL 不能使用非标准端口。", 400);
+  }
+  if (isPrivateOrLocalHostname(parsed.hostname)) {
+    throw new RewriteError("unsafe_base_url", "Base URL 不能指向 private/local 网络地址。", 400);
+  }
+
+  const normalizedBase = `${parsed.origin}${parsed.pathname.replace(/\/+$/, "")}`;
+  return normalizedBase.endsWith("/chat/completions")
+    ? normalizedBase
+    : `${normalizedBase}/chat/completions`;
+}
+
 export function resolveProviderTarget(args: ResolveArgs): ProviderTarget {
   if (args.provider === "openai") {
     return { endpoint: OPENAI_ENDPOINT, format: "openai" };
@@ -102,7 +179,7 @@ export function resolveProviderTarget(args: ResolveArgs): ProviderTarget {
   }
 
   if (args.baseUrl) {
-    throw new Error("Custom Base URL is disabled in V1");
+    return { endpoint: resolveCustomOpenAIEndpoint(args.baseUrl), format: "openai" };
   }
 
   const preset = PRESETS.find(

@@ -39,7 +39,7 @@ describe("handleRewriteRequest", () => {
     ).rejects.toMatchObject({ code: "content_too_long" } satisfies Partial<RewriteError>);
   });
 
-  it("rejects custom baseUrl in V1", async () => {
+  it("accepts a safe custom OpenAI-compatible Base URL", async () => {
     await expect(
       handleRewriteRequest({
         ...validPayload,
@@ -47,7 +47,21 @@ describe("handleRewriteRequest", () => {
         presetId: undefined,
         baseUrl: "https://example.com/v1",
       }),
-    ).rejects.toThrow("Custom Base URL is disabled in V1");
+    ).resolves.toMatchObject({
+      ok: true,
+      provider: "openai-compatible",
+    });
+  });
+
+  it("rejects unsafe custom Base URLs", async () => {
+    await expect(
+      handleRewriteRequest({
+        ...validPayload,
+        provider: "openai-compatible",
+        presetId: undefined,
+        baseUrl: "https://localhost/v1",
+      }),
+    ).rejects.toMatchObject({ code: "unsafe_base_url" } satisfies Partial<RewriteError>);
   });
 
   it("returns normalized success response", async () => {

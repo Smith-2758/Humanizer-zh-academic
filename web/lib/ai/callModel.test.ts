@@ -46,6 +46,7 @@ describe("callModel", () => {
       expect.objectContaining({
         method: "POST",
         headers: expect.objectContaining({ Authorization: "Bearer sk-test" }),
+        redirect: "error",
       }),
     );
 

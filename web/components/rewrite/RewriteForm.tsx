@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
-import { ModelSettingsPanel } from "./ModelSettingsPanel";
+import { type InterfaceMode, ModelSettingsPanel } from "./ModelSettingsPanel";
 import type { CustomRole, ProviderPresetId, RewriteRequest, RewriteRole, Seriousness } from "@/lib/ai/types";
 import { readTextFromFile } from "@/lib/file/readTextFile";
 import { loadSettings, saveSettings } from "@/lib/storage/settings";
@@ -26,6 +26,8 @@ export function RewriteForm({ onSubmit = () => undefined, isSubmitting = false }
   const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState(DEFAULT_PAYLOAD.model);
   const [presetId, setPresetId] = useState<ProviderPresetId>(DEFAULT_PAYLOAD.presetId);
+  const [interfaceMode, setInterfaceMode] = useState<InterfaceMode>("official");
+  const [baseUrl, setBaseUrl] = useState("");
   const [seriousness, setSeriousness] = useState<Seriousness>(DEFAULT_PAYLOAD.seriousness);
   const [role, setRole] = useState<RewriteRole>(DEFAULT_PAYLOAD.role);
   const [customRole, setCustomRole] = useState<CustomRole>({ discipline: "", stage: "", purpose: "" });
@@ -86,6 +88,11 @@ export function RewriteForm({ onSubmit = () => undefined, isSubmitting = false }
       setError("高级要求最多 500 字，请缩短后再提交。");
       return;
     }
+    const trimmedBaseUrl = baseUrl.trim();
+    if (interfaceMode === "custom" && !trimmedBaseUrl) {
+      setError("请填写自定义 Base URL。");
+      return;
+    }
 
     const nextCustomRole = {
       discipline: customRole.discipline.trim(),
@@ -97,11 +104,19 @@ export function RewriteForm({ onSubmit = () => undefined, isSubmitting = false }
       return;
     }
 
-    const provider = presetId === "anthropic" ? "anthropic" : presetId === "openai" ? "openai" : "openai-compatible";
+    const provider =
+      interfaceMode === "custom"
+        ? "openai-compatible"
+        : presetId === "anthropic"
+          ? "anthropic"
+          : presetId === "openai"
+            ? "openai"
+            : "openai-compatible";
     const trimmedExtraInstruction = extraInstruction.trim();
     const requestState: RewriteRequest = {
       provider,
-      presetId,
+      presetId: interfaceMode === "custom" ? undefined : presetId,
+      ...(interfaceMode === "custom" ? { baseUrl: trimmedBaseUrl } : {}),
       apiKey,
       model,
       sourceText,
@@ -112,7 +127,7 @@ export function RewriteForm({ onSubmit = () => undefined, isSubmitting = false }
     };
 
     setError(null);
-    saveSettings({ provider, presetId, model, defaultSeriousness: seriousness, defaultRole: role });
+    saveSettings({ provider, presetId: interfaceMode === "custom" ? undefined : presetId, model, defaultSeriousness: seriousness, defaultRole: role });
     onSubmit(requestState);
   }
 
@@ -246,9 +261,13 @@ export function RewriteForm({ onSubmit = () => undefined, isSubmitting = false }
         apiKey={apiKey}
         model={model}
         presetId={presetId}
+        baseUrl={baseUrl}
+        interfaceMode={interfaceMode}
         onApiKeyChange={setApiKey}
         onModelChange={setModel}
         onPresetChange={setPresetId}
+        onBaseUrlChange={setBaseUrl}
+        onInterfaceModeChange={setInterfaceMode}
       />
     </form>
   );

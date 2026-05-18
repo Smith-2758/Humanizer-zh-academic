@@ -23,10 +23,26 @@ describe("resolveProviderTarget", () => {
     });
   });
 
-  it("rejects custom baseUrl in V1", () => {
+  it("resolves a safe custom OpenAI-compatible Base URL", () => {
+    expect(resolveProviderTarget({ provider: "openai-compatible", baseUrl: "https://example.com/v1/" })).toEqual({
+      endpoint: "https://example.com/v1/chat/completions",
+      format: "openai",
+    });
+  });
+
+  it("rejects unsafe custom Base URLs", () => {
     expect(() =>
-      resolveProviderTarget({ provider: "openai-compatible", baseUrl: "https://example.com/v1" }),
-    ).toThrow("Custom Base URL is disabled in V1");
+      resolveProviderTarget({ provider: "openai-compatible", baseUrl: "http://example.com/v1" }),
+    ).toThrow(/HTTPS/i);
+    expect(() =>
+      resolveProviderTarget({ provider: "openai-compatible", baseUrl: "https://localhost/v1" }),
+    ).toThrow(/private|local/i);
+    expect(() =>
+      resolveProviderTarget({ provider: "openai-compatible", baseUrl: "https://192.168.1.10/v1" }),
+    ).toThrow(/private|local/i);
+    expect(() =>
+      resolveProviderTarget({ provider: "openai-compatible", baseUrl: "https://example.com/v1?token=1" }),
+    ).toThrow(/query|fragment/i);
   });
 
   it("exposes recommended model metadata for UI", () => {

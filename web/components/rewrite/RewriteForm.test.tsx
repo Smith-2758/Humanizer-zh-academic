@@ -78,6 +78,40 @@ describe("RewriteForm", () => {
     );
   });
 
+  it("submits a custom OpenAI-compatible Base URL when custom interface is selected", () => {
+    const onSubmit = vi.fn();
+    render(<RewriteForm onSubmit={onSubmit} />);
+
+    fireEvent.change(screen.getByLabelText("待处理原文"), { target: { value: "这是原文。" } });
+    fireEvent.click(screen.getByRole("button", { name: "自定义接口" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Base URL" }), {
+      target: { value: "https://gateway.example.com/v1" },
+    });
+    fireEvent.change(screen.getByLabelText("模型名"), { target: { value: "custom-model" } });
+    fireEvent.click(screen.getByRole("button", { name: "开始改写" }));
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: "openai-compatible",
+        presetId: undefined,
+        baseUrl: "https://gateway.example.com/v1",
+        model: "custom-model",
+      }),
+    );
+  });
+
+  it("requires Base URL before submitting custom interface requests", () => {
+    const onSubmit = vi.fn();
+    render(<RewriteForm onSubmit={onSubmit} />);
+
+    fireEvent.change(screen.getByLabelText("待处理原文"), { target: { value: "这是原文。" } });
+    fireEvent.click(screen.getByRole("button", { name: "自定义接口" }));
+    fireEvent.click(screen.getByRole("button", { name: "开始改写" }));
+
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(screen.getByText("请填写自定义 Base URL。")).toBeInTheDocument();
+  });
+
   it("requires all custom role fields when role is custom", () => {
     const onSubmit = vi.fn();
     render(<RewriteForm onSubmit={onSubmit} />);
