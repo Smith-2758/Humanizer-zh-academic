@@ -20,6 +20,27 @@
 3. Agent 会自动确认 `角色`。
 4. 参数齐全后，再按对应规则执行改写。
 
+## 网站版 V1
+
+本仓库新增了 `web/` 子项目，用于提供可部署到 Vercel 的网页版本。网站版定位为中文学术文本润色与表达校准工具，用户自带模型 API Key，站点本身不提供模型额度。
+
+网站版文档见：`web/README.md`。
+
+本地开发常用命令：
+
+```powershell
+npm --prefix web install
+npm --prefix web run dev
+```
+
+交付前验证命令：
+
+```powershell
+npm --prefix web run test:run
+npm --prefix web run lint
+npm --prefix web run build
+```
+
 ## 2. 当前能力
 
 本版本重点提供以下能力：
@@ -161,13 +182,15 @@ C:\Users\<你的用户名>\.codex\skills\humanizer-zh-academic-student\SKILL.md
 
 ## 7. 仓库结构
 
-当前主线版本只保留实际使用所需的核心文件：
+当前仓库同时包含 Agent Skill 和网站版 V1：
 
 ```text
 humanizer-zh-academic/
 ├── SKILL.md
 ├── README.md
-└── LICENSE
+├── LICENSE
+├── docs/
+└── web/
 ```
 
 ## 8. 参考与许可
