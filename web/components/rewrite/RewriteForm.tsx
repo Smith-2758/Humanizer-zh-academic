@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { ModelSettingsPanel } from "./ModelSettingsPanel";
 import type { CustomRole, ProviderPresetId, RewriteRequest, RewriteRole, Seriousness } from "@/lib/ai/types";
+import { readTextFromFile } from "@/lib/file/readTextFile";
 import { loadSettings, saveSettings } from "@/lib/storage/settings";
 
 type RewriteFormProps = {
@@ -29,6 +30,8 @@ export function RewriteForm({ onSubmit = () => undefined, isSubmitting = false }
   const [role, setRole] = useState<RewriteRole>(DEFAULT_PAYLOAD.role);
   const [customRole, setCustomRole] = useState<CustomRole>({ discipline: "", stage: "", purpose: "" });
   const [error, setError] = useState<string | null>(null);
+  const [fileName, setFileName] = useState<string | null>(null);
+  const [isReadingFile, setIsReadingFile] = useState(false);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -42,6 +45,32 @@ export function RewriteForm({ onSubmit = () => undefined, isSubmitting = false }
 
     return () => window.clearTimeout(timeout);
   }, []);
+
+  async function handleFileChange(fileList: FileList | null) {
+    const file = fileList?.[0];
+    if (!file) return;
+
+    setIsReadingFile(true);
+    setError(null);
+    try {
+      const text = await readTextFromFile(file);
+      if (!text.trim()) {
+        setError("文件中没有读取到可用文本。");
+        setFileName(null);
+        return;
+      }
+      setSourceText(text);
+      setFileName(file.name);
+      if (text.length > 8_000) {
+        setError("文件内容已填入原文框，但超过 8000 字，请删减后再提交。");
+      }
+    } catch (readError) {
+      setFileName(null);
+      setError(readError instanceof Error ? readError.message : "文件读取失败，请换一个文件试试。");
+    } finally {
+      setIsReadingFile(false);
+    }
+  }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -100,6 +129,24 @@ export function RewriteForm({ onSubmit = () => undefined, isSubmitting = false }
         </p>
 
         <div className="mt-5 space-y-4">
+          <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4">
+            <label className="block text-sm font-medium text-slate-700">
+              上传文本文件
+              <input
+                aria-label="上传文本文件"
+                className="mt-2 block w-full text-sm text-slate-700 file:mr-4 file:rounded-full file:border-0 file:bg-slate-950 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-slate-800"
+                type="file"
+                accept=".docx,.md,.txt,text/plain,text/markdown,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                onChange={(event) => handleFileChange(event.target.files)}
+                disabled={isReadingFile}
+              />
+            </label>
+            <p className="mt-2 text-sm text-slate-600">
+              支持 .docx、.md、.txt；读取后会自动填入下方原文框，输出仍为纯文本。
+            </p>
+            {fileName ? <p className="mt-2 text-sm text-slate-700">已读取：{fileName}</p> : null}
+          </div>
+
           <label className="block text-sm font-medium text-slate-700">
             待处理原文
             <textarea

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { RewriteForm } from "./RewriteForm";
 
@@ -42,6 +42,17 @@ describe("RewriteForm", () => {
     expect(screen.getByText(/粘贴原文/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "设置页" })).toHaveAttribute("href", "/settings");
     expect(screen.queryByLabelText("记住 API Key")).not.toBeInTheDocument();
+  });
+
+  it("fills source text from an uploaded txt file", async () => {
+    render(<RewriteForm onSubmit={vi.fn()} />);
+    const file = new File(["上传的正文"], "source.txt", { type: "text/plain" });
+
+    fireEvent.change(screen.getByLabelText("上传文本文件"), { target: { files: [file] } });
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("待处理原文")).toHaveValue("上传的正文");
+    });
   });
 
   it("submits controlled custom role fields", () => {
