@@ -22,24 +22,23 @@
 
 ## 网站版 V1
 
-本仓库新增了 `web/` 子项目，用于提供可部署到 Vercel 的网页版本。网站版定位为中文学术文本润色与表达校准工具，用户自带模型 API Key，站点本身不提供模型额度。
+我也做了一个可以直接在浏览器里使用的网站版：
 
-网站版文档见：`web/README.md`。
-
-本地开发常用命令：
-
-```powershell
-npm --prefix web install
-npm --prefix web run dev
+```text
+https://web-tau-two-54.vercel.app
 ```
 
-交付前验证命令：
+网站版适合不想安装本地 skill、只想临时处理一段文本的用户。它的定位仍然是中文学术文本润色与表达校准：帮助课程论文、实验报告、毕业设计和答辩稿减少模板感，让表达更自然、清楚、克制。
 
-```powershell
-npm --prefix web run test:run
-npm --prefix web run lint
-npm --prefix web run build
-```
+使用方法：
+
+1. 打开网站。
+2. 选择模型服务，并填入自己的 API Key。
+3. 粘贴要处理的中文学术文本。
+4. 选择严肃度和写作角色。
+5. 点击开始改写，按结果自行核对和调整。
+
+网站本身不提供模型额度，API Key 需要用户自己准备。不要提交涉密、隐私或未经授权的内容。
 
 ## 2. 当前能力
 
