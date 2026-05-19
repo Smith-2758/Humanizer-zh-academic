@@ -21,7 +21,9 @@ export type ProviderPreset = {
   helpText: string;
 };
 
-const OPENAI_ENDPOINT = "https://api.openai.com/v1/chat/completions";
+const OPENAI_BASE_URL = "https://api.openai.com/v1";
+const OPENAI_ENDPOINT = `${OPENAI_BASE_URL}/chat/completions`;
+const OPENAI_MODELS_ENDPOINT = `${OPENAI_BASE_URL}/models`;
 const ANTHROPIC_ENDPOINT = "https://api.anthropic.com/v1/messages";
 const LOCAL_HOSTNAMES = new Set(["localhost", "local"]);
 
@@ -30,7 +32,7 @@ const PRESETS: ProviderPreset[] = [
     id: "openai",
     label: "OpenAI 官方",
     provider: "openai",
-    recommendedModel: "gpt-4o-mini",
+    recommendedModel: "gpt-5.5",
     helpText: "使用 OpenAI 官方 API。",
   },
   {
@@ -38,7 +40,7 @@ const PRESETS: ProviderPreset[] = [
     label: "DeepSeek",
     provider: "openai-compatible",
     baseUrl: "https://api.deepseek.com/v1",
-    recommendedModel: "deepseek-chat",
+    recommendedModel: "deepseek-v4-pro",
     helpText: "OpenAI 兼容接口，适合低成本测试。",
   },
   {
@@ -46,7 +48,7 @@ const PRESETS: ProviderPreset[] = [
     label: "Kimi / Moonshot",
     provider: "openai-compatible",
     baseUrl: "https://api.moonshot.cn/v1",
-    recommendedModel: "moonshot-v1-8k",
+    recommendedModel: "kimi-k2.6",
     helpText: "OpenAI 兼容接口。",
   },
   {
@@ -54,7 +56,7 @@ const PRESETS: ProviderPreset[] = [
     label: "硅基流动",
     provider: "openai-compatible",
     baseUrl: "https://api.siliconflow.cn/v1",
-    recommendedModel: "deepseek-ai/DeepSeek-V3",
+    recommendedModel: "deepseek-ai/DeepSeek-V3.2",
     helpText: "OpenAI 兼容接口。",
   },
   {
@@ -62,7 +64,7 @@ const PRESETS: ProviderPreset[] = [
     label: "智谱",
     provider: "openai-compatible",
     baseUrl: "https://open.bigmodel.cn/api/paas/v4",
-    recommendedModel: "glm-4-flash",
+    recommendedModel: "GLM-5.1",
     helpText: "OpenAI 兼容接口。",
   },
   {
@@ -70,7 +72,7 @@ const PRESETS: ProviderPreset[] = [
     label: "通义千问",
     provider: "openai-compatible",
     baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
-    recommendedModel: "qwen-plus",
+    recommendedModel: "qwen3.6-plus",
     helpText: "OpenAI 兼容接口。",
   },
   {
@@ -78,14 +80,14 @@ const PRESETS: ProviderPreset[] = [
     label: "豆包",
     provider: "openai-compatible",
     baseUrl: "https://ark.cn-beijing.volces.com/api/v3",
-    recommendedModel: "doubao-1-5-lite-32k",
+    recommendedModel: "doubao-seed-2-0-pro",
     helpText: "OpenAI 兼容接口，模型名以控制台为准。",
   },
   {
     id: "anthropic",
     label: "Anthropic / Claude",
     provider: "anthropic",
-    recommendedModel: "claude-3-5-sonnet-latest",
+    recommendedModel: "claude-sonnet-4-6",
     helpText: "使用 Anthropic 官方 Messages API。",
   },
 ];
@@ -134,7 +136,7 @@ function isPrivateOrLocalHostname(hostname: string) {
   );
 }
 
-function resolveCustomOpenAIEndpoint(baseUrl: string) {
+function resolveCustomOpenAIBaseUrl(baseUrl: string) {
   const trimmed = baseUrl.trim();
   if (!trimmed) {
     throw new RewriteError("invalid_base_url", "请填写自定义 Base URL。", 400);
@@ -163,10 +165,23 @@ function resolveCustomOpenAIEndpoint(baseUrl: string) {
     throw new RewriteError("unsafe_base_url", "Base URL 不能指向 private/local 网络地址。", 400);
   }
 
-  const normalizedBase = `${parsed.origin}${parsed.pathname.replace(/\/+$/, "")}`;
-  return normalizedBase.endsWith("/chat/completions")
-    ? normalizedBase
-    : `${normalizedBase}/chat/completions`;
+  const normalizedPath = parsed.pathname.replace(/\/+$/, "").replace(/\/chat\/completions$/, "");
+  return `${parsed.origin}${normalizedPath}`;
+}
+
+function resolveOpenAICompatiblePresetBaseUrl(presetId?: ProviderPresetId) {
+  const preset = PRESETS.find(
+    (item) => item.id === presetId && item.provider === "openai-compatible",
+  );
+  if (!preset?.baseUrl) {
+    throw new Error("Unknown OpenAI-compatible provider preset");
+  }
+
+  return preset.baseUrl.replace(/\/+$/, "");
+}
+
+function endpointFromBase(baseUrl: string, path: "/chat/completions" | "/models") {
+  return `${baseUrl.replace(/\/+$/, "")}${path}`;
 }
 
 export function resolveProviderTarget(args: ResolveArgs): ProviderTarget {
@@ -179,15 +194,24 @@ export function resolveProviderTarget(args: ResolveArgs): ProviderTarget {
   }
 
   if (args.baseUrl) {
-    return { endpoint: resolveCustomOpenAIEndpoint(args.baseUrl), format: "openai" };
+    return { endpoint: endpointFromBase(resolveCustomOpenAIBaseUrl(args.baseUrl), "/chat/completions"), format: "openai" };
   }
 
-  const preset = PRESETS.find(
-    (item) => item.id === args.presetId && item.provider === "openai-compatible",
-  );
-  if (!preset?.baseUrl) {
-    throw new Error("Unknown OpenAI-compatible provider preset");
+  return { endpoint: endpointFromBase(resolveOpenAICompatiblePresetBaseUrl(args.presetId), "/chat/completions"), format: "openai" };
+}
+
+export function resolveProviderModelsTarget(args: ResolveArgs): ProviderTarget {
+  if (args.provider === "openai") {
+    return { endpoint: OPENAI_MODELS_ENDPOINT, format: "openai" };
   }
 
-  return { endpoint: `${preset.baseUrl.replace(/\/$/, "")}/chat/completions`, format: "openai" };
+  if (args.provider === "anthropic") {
+    throw new RewriteError("provider_error", "Anthropic 暂不支持拉取模型列表，请手动填写模型名。", 400);
+  }
+
+  if (args.baseUrl) {
+    return { endpoint: endpointFromBase(resolveCustomOpenAIBaseUrl(args.baseUrl), "/models"), format: "openai" };
+  }
+
+  return { endpoint: endpointFromBase(resolveOpenAICompatiblePresetBaseUrl(args.presetId), "/models"), format: "openai" };
 }

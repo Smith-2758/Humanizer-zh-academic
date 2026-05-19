@@ -112,6 +112,50 @@ describe("RewriteForm", () => {
     expect(screen.getByText("请填写自定义 Base URL。")).toBeInTheDocument();
   });
 
+  it("fetches models with the current official provider settings", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ ok: true, models: ["gpt-5.5", "gpt-5.4"] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    render(<RewriteForm onSubmit={vi.fn()} />);
+
+    fireEvent.change(screen.getByLabelText("API Key"), { target: { value: "sk-test" } });
+    fireEvent.click(screen.getByRole("button", { name: "拉取模型" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/models", expect.any(Object)));
+    const payload = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(payload).toMatchObject({ provider: "openai", presetId: "openai", apiKey: "sk-test" });
+    expect(payload.baseUrl).toBeUndefined();
+  });
+
+  it("fetches models with custom Base URL settings", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ ok: true, models: ["custom-model"] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    render(<RewriteForm onSubmit={vi.fn()} />);
+
+    fireEvent.change(screen.getByLabelText("API Key"), { target: { value: "sk-test" } });
+    fireEvent.click(screen.getByRole("button", { name: "自定义接口" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Base URL" }), { target: { value: "https://gateway.example.com/v1" } });
+    fireEvent.click(screen.getByRole("button", { name: "拉取模型" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/models", expect.any(Object)));
+    const payload = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(payload).toMatchObject({
+      provider: "openai-compatible",
+      apiKey: "sk-test",
+      baseUrl: "https://gateway.example.com/v1",
+    });
+    expect(payload.presetId).toBeUndefined();
+  });
+
   it("requires all custom role fields when role is custom", () => {
     const onSubmit = vi.fn();
     render(<RewriteForm onSubmit={onSubmit} />);

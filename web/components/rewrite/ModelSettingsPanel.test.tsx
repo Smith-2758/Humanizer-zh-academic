@@ -8,7 +8,7 @@ describe("ModelSettingsPanel", () => {
 
     fireEvent.change(screen.getByLabelText("平台预设"), { target: { value: "deepseek" } });
 
-    expect(screen.getByLabelText("模型名")).toHaveValue("deepseek-chat");
+    expect(screen.getByLabelText("模型名")).toHaveValue("deepseek-v4-pro");
   });
 
   it("keeps Base URL hidden while official presets are selected", () => {
@@ -54,11 +54,34 @@ describe("ModelSettingsPanel", () => {
   });
 
   it("syncs displayed preset and model when defaults are loaded by the parent", () => {
-    const { rerender } = render(<ModelSettingsPanel presetId="openai" model="gpt-4o-mini" />);
+    const { rerender } = render(<ModelSettingsPanel presetId="openai" model="gpt-5.5" />);
 
-    rerender(<ModelSettingsPanel presetId="deepseek" model="deepseek-chat" />);
+    rerender(<ModelSettingsPanel presetId="deepseek" model="deepseek-v4-pro" />);
 
     expect(screen.getByLabelText("平台预设")).toHaveValue("deepseek");
-    expect(screen.getByLabelText("模型名")).toHaveValue("deepseek-chat");
+    expect(screen.getByLabelText("模型名")).toHaveValue("deepseek-v4-pro");
+  });
+
+  it("loads models and lets the user select one", async () => {
+    const onModelChange = vi.fn();
+    const fetchModels = vi.fn().mockResolvedValue(["gpt-4.1-mini", "gpt-4.1"]);
+    render(<ModelSettingsPanel apiKey="sk-test" model="gpt-4.1-mini" onModelChange={onModelChange} onFetchModels={fetchModels} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "拉取模型" }));
+
+    expect(await screen.findByText("已拉取 2 个模型。请选择或继续手动输入。")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("可选模型"), { target: { value: "gpt-4.1" } });
+
+    expect(onModelChange).toHaveBeenCalledWith("gpt-4.1");
+  });
+
+  it("keeps manual model input when model fetching fails", async () => {
+    const fetchModels = vi.fn().mockRejectedValue(new Error("上游不支持 /models"));
+    render(<ModelSettingsPanel apiKey="sk-test" model="manual-model" onFetchModels={fetchModels} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "拉取模型" }));
+
+    expect(await screen.findByText("上游不支持 /models")).toBeInTheDocument();
+    expect(screen.getByLabelText("模型名")).toHaveValue("manual-model");
   });
 });

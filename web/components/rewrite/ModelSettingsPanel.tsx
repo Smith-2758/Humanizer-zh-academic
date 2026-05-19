@@ -17,6 +17,7 @@ type ModelSettingsPanelProps = {
   onPresetChange?: (presetId: ProviderPresetId) => void;
   onBaseUrlChange?: (baseUrl: string) => void;
   onInterfaceModeChange?: (mode: InterfaceMode) => void;
+  onFetchModels?: () => Promise<string[]>;
 };
 
 export function ModelSettingsPanel({
@@ -30,6 +31,7 @@ export function ModelSettingsPanel({
   onPresetChange,
   onBaseUrlChange,
   onInterfaceModeChange,
+  onFetchModels,
 }: ModelSettingsPanelProps = {}) {
   const presets = useMemo(() => getProviderPresets(), []);
   const initialPreset = presets.find((preset) => preset.id === (presetId ?? "openai")) ?? presets[0];
@@ -37,16 +39,24 @@ export function ModelSettingsPanel({
   const [internalModel, setInternalModel] = useState(model ?? initialPreset.recommendedModel);
   const [internalBaseUrl, setInternalBaseUrl] = useState(baseUrl ?? "");
   const [internalInterfaceMode, setInternalInterfaceMode] = useState<InterfaceMode>(interfaceMode ?? "official");
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [modelsStatus, setModelsStatus] = useState<string | null>(null);
+  const [modelsError, setModelsError] = useState<string | null>(null);
+  const [isFetchingModels, setIsFetchingModels] = useState(false);
   const selectedPresetId = presetId ?? internalPresetId;
   const selectedPreset = presets.find((preset) => preset.id === selectedPresetId) ?? initialPreset;
   const currentModel = model ?? internalModel;
   const currentBaseUrl = baseUrl ?? internalBaseUrl;
   const currentInterfaceMode = interfaceMode ?? internalInterfaceMode;
+  const canFetchModels = selectedPreset.provider !== "anthropic" || currentInterfaceMode === "custom";
 
   function handlePresetChange(nextPresetId: ProviderPresetId) {
     const nextPreset = presets.find((preset) => preset.id === nextPresetId) ?? initialPreset;
     setInternalPresetId(nextPreset.id);
     setInternalModel(nextPreset.recommendedModel);
+    setAvailableModels([]);
+    setModelsStatus(null);
+    setModelsError(null);
     onPresetChange?.(nextPreset.id);
     onModelChange?.(nextPreset.recommendedModel);
   }
@@ -58,12 +68,45 @@ export function ModelSettingsPanel({
 
   function handleInterfaceModeChange(nextMode: InterfaceMode) {
     setInternalInterfaceMode(nextMode);
+    setAvailableModels([]);
+    setModelsStatus(null);
+    setModelsError(null);
     onInterfaceModeChange?.(nextMode);
   }
 
   function handleBaseUrlChange(nextBaseUrl: string) {
     setInternalBaseUrl(nextBaseUrl);
+    setAvailableModels([]);
+    setModelsStatus(null);
+    setModelsError(null);
     onBaseUrlChange?.(nextBaseUrl);
+  }
+
+  async function handleFetchModels() {
+    setModelsStatus(null);
+    setModelsError(null);
+
+    if (!apiKey.trim()) {
+      setModelsError("请先填写 API Key，再拉取模型。");
+      return;
+    }
+    if (!canFetchModels) {
+      setModelsError("Anthropic 暂不支持拉取模型列表，请手动填写模型名。");
+      return;
+    }
+    if (!onFetchModels) return;
+
+    setIsFetchingModels(true);
+    try {
+      const models = await onFetchModels();
+      setAvailableModels(models);
+      setModelsStatus(`已拉取 ${models.length} 个模型。请选择或继续手动输入。`);
+    } catch (error) {
+      setAvailableModels([]);
+      setModelsError(error instanceof Error ? error.message : "模型列表拉取失败，请手动填写模型名。");
+    } finally {
+      setIsFetchingModels(false);
+    }
   }
 
   return (
@@ -133,14 +176,53 @@ export function ModelSettingsPanel({
           />
         </label>
 
-        <label className="block text-sm font-medium text-slate-700">
-          模型名
-          <input
-            className="mt-2 w-full rounded-xl border border-slate-300 px-3 py-2 text-slate-950"
-            value={currentModel}
-            onChange={(event) => handleModelChange(event.target.value)}
-          />
-        </label>
+        <div className="space-y-3">
+          <div className="flex items-end gap-2">
+            <label className="block flex-1 text-sm font-medium text-slate-700">
+              模型名
+              <input
+                className="mt-2 w-full rounded-xl border border-slate-300 px-3 py-2 text-slate-950"
+                value={currentModel}
+                list="available-models"
+                onChange={(event) => handleModelChange(event.target.value)}
+              />
+            </label>
+            <button
+              type="button"
+              className="rounded-full border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+              onClick={handleFetchModels}
+              disabled={isFetchingModels}
+            >
+              {isFetchingModels ? "拉取中..." : "拉取模型"}
+            </button>
+          </div>
+          <datalist id="available-models">
+            {availableModels.map((item) => (
+              <option key={item} value={item} />
+            ))}
+          </datalist>
+          {availableModels.length > 0 ? (
+            <label className="block text-sm font-medium text-slate-700">
+              可选模型
+              <select
+                className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-950"
+                value={availableModels.includes(currentModel) ? currentModel : ""}
+                onChange={(event) => handleModelChange(event.target.value)}
+              >
+                <option value="" disabled>
+                  选择一个模型
+                </option>
+                {availableModels.map((item) => (
+                  <option key={item} value={item}>
+                    {item}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+          {modelsStatus ? <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-700">{modelsStatus}</p> : null}
+          {modelsError ? <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{modelsError}</p> : null}
+        </div>
 
         <div className="rounded-xl bg-slate-50 p-3 text-sm leading-6 text-slate-600">
           {currentInterfaceMode === "official" ? (

@@ -19,6 +19,12 @@ export type ModelResult = {
   usage?: Usage;
 };
 
+type ListModelsArgs = {
+  endpoint: string;
+  apiKey: string;
+  signal?: AbortSignal;
+};
+
 function extractErrorMessage(payload: unknown) {
   if (typeof payload === "string") return payload;
   if (!payload || typeof payload !== "object") return "Unknown upstream error";
@@ -56,6 +62,40 @@ async function parseJson(response: Response) {
   } catch {
     return undefined;
   }
+}
+
+function normalizeModelIds(payload: unknown) {
+  if (!payload || typeof payload !== "object") return [];
+  const data = "data" in payload ? payload.data : undefined;
+  if (!Array.isArray(data)) return [];
+
+  const ids = data
+    .map((item) => (item && typeof item === "object" && "id" in item ? item.id : undefined))
+    .filter((id): id is string => typeof id === "string" && id.trim().length > 0)
+    .map((id) => id.trim());
+
+  return [...new Set(ids)];
+}
+
+export async function listOpenAICompatibleModels(args: ListModelsArgs): Promise<string[]> {
+  const response = await fetch(args.endpoint, {
+    method: "GET",
+    redirect: "error",
+    headers: {
+      Authorization: `Bearer ${args.apiKey}`,
+    },
+    signal: args.signal,
+  });
+
+  const payload = await parseJson(response);
+  if (!response.ok) mapProviderError(response.status, extractErrorMessage(payload));
+
+  const models = normalizeModelIds(payload);
+  if (models.length === 0) {
+    throw new RewriteError("provider_error", "没有读取到可用模型列表，请手动填写模型名。", 502);
+  }
+
+  return models;
 }
 
 export async function callOpenAICompatible(args: CallProviderArgs): Promise<ModelResult> {

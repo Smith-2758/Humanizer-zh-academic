@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { RewriteError } from "./errors";
 import { callModel } from "./callModel";
+import { listOpenAICompatibleModels } from "./openai";
 
 const baseArgs = {
   endpoint: "https://api.example.com/v1/chat/completions",
@@ -143,5 +144,55 @@ describe("callModel", () => {
       code: "provider_error",
       detail: "strange upstream failure",
     } satisfies Partial<RewriteError>);
+  });
+});
+
+describe("listOpenAICompatibleModels", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("loads and normalizes OpenAI-compatible model IDs", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      mockJsonResponse({
+        data: [
+          { id: "gpt-4.1-mini" },
+          { id: "gpt-4.1-mini" },
+          { id: "gpt-4.1" },
+          { id: "" },
+          { object: "model" },
+        ],
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(listOpenAICompatibleModels({ endpoint: "https://api.example.com/v1/models", apiKey: "sk-test" })).resolves.toEqual([
+      "gpt-4.1-mini",
+      "gpt-4.1",
+    ]);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.example.com/v1/models",
+      expect.objectContaining({
+        method: "GET",
+        redirect: "error",
+        headers: expect.objectContaining({ Authorization: "Bearer sk-test" }),
+      }),
+    );
+  });
+
+  it("maps model list upstream auth failures", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(mockJsonResponse({ error: { message: "bad key" } }, { status: 401 })));
+
+    await expect(listOpenAICompatibleModels({ endpoint: "https://api.example.com/v1/models", apiKey: "bad" })).rejects.toMatchObject({
+      code: "invalid_api_key",
+    });
+  });
+
+  it("rejects empty model list payloads", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(mockJsonResponse({ data: [] })));
+
+    await expect(listOpenAICompatibleModels({ endpoint: "https://api.example.com/v1/models", apiKey: "sk-test" })).rejects.toMatchObject({
+      code: "provider_error",
+    });
   });
 });

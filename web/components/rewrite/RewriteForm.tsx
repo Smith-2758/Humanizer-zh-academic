@@ -12,10 +12,14 @@ type RewriteFormProps = {
   isSubmitting?: boolean;
 };
 
+type ModelsApiResponse =
+  | { ok: true; models: string[] }
+  | { ok: false; message?: string; errorCode?: string; detail?: string };
+
 const DEFAULT_PAYLOAD = {
   provider: "openai" as const,
   presetId: "openai" as ProviderPresetId,
-  model: "gpt-4o-mini",
+  model: "gpt-5.5",
   seriousness: "中" as Seriousness,
   role: "课程论文作者" as RewriteRole,
 };
@@ -74,6 +78,42 @@ export function RewriteForm({ onSubmit = () => undefined, isSubmitting = false }
     }
   }
 
+  function resolveProviderForCurrentSettings() {
+    return interfaceMode === "custom"
+      ? "openai-compatible"
+      : presetId === "anthropic"
+        ? "anthropic"
+        : presetId === "openai"
+          ? "openai"
+          : "openai-compatible";
+  }
+
+  async function fetchModels() {
+    const provider = resolveProviderForCurrentSettings();
+    const trimmedBaseUrl = baseUrl.trim();
+    if (interfaceMode === "custom" && !trimmedBaseUrl) {
+      throw new Error("请填写自定义 Base URL。");
+    }
+
+    const response = await fetch("/api/models", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        provider,
+        presetId: interfaceMode === "custom" ? undefined : presetId,
+        ...(interfaceMode === "custom" ? { baseUrl: trimmedBaseUrl } : {}),
+        apiKey,
+      }),
+    });
+    const body = (await response.json()) as ModelsApiResponse;
+
+    if (!body.ok) {
+      throw new Error(body.message ?? "模型列表拉取失败，请手动填写模型名。");
+    }
+
+    return body.models;
+  }
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!sourceText.trim()) {
@@ -104,14 +144,7 @@ export function RewriteForm({ onSubmit = () => undefined, isSubmitting = false }
       return;
     }
 
-    const provider =
-      interfaceMode === "custom"
-        ? "openai-compatible"
-        : presetId === "anthropic"
-          ? "anthropic"
-          : presetId === "openai"
-            ? "openai"
-            : "openai-compatible";
+    const provider = resolveProviderForCurrentSettings();
     const trimmedExtraInstruction = extraInstruction.trim();
     const requestState: RewriteRequest = {
       provider,
@@ -268,6 +301,7 @@ export function RewriteForm({ onSubmit = () => undefined, isSubmitting = false }
         onPresetChange={setPresetId}
         onBaseUrlChange={setBaseUrl}
         onInterfaceModeChange={setInterfaceMode}
+        onFetchModels={fetchModels}
       />
     </form>
   );
